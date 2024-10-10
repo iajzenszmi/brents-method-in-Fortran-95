@@ -1,0 +1,169 @@
+ian@ian-Latitude-E7440:~$ cat parabtest.f95 
+program test_brent_complex
+    use brent_module
+    implicit none
+    real(8) :: root, tol
+    real(8) :: a, b
+    integer :: i
+    ! Remove the EXTERNAL attribute since functions are defined in this file
+    ! The functions are now simply referenced later in the `contains` block
+
+    ! Define the tolerance for all cases
+    tol = 1.0d-8
+
+    ! Define test cases
+    do i = 1, 3
+        if (i == 1) then
+            print *, "Testing cubic_function: f(x) = x^3 - 3x + 1"
+            a = -2.0d0
+            b = 2.0d0
+            root = brent(cubic_function, a, b, tol)
+            print *, "Estimated root: ", root
+            print *, "Function value at root: ", cubic_function(root)
+            print *, "-----------------------------------------------"
+        elseif (i == 2) then
+            print *, "Testing sine_function: f(x) = sin(x) - 0.5"
+            a = 0.0d0
+            b = 2.0d0
+            root = brent(sine_function, a, b, tol)
+            print *, "Estimated root: ", root
+            print *, "Function value at root: ", sine_function(root)
+            print *, "-----------------------------------------------"
+        elseif (i == 3) then
+            print *, "Testing rational_function: f(x) = (x - 1) / (x + 2)"
+            a = -5.0d0
+            b = 5.0d0
+            root = brent(rational_function, a, b, tol)
+            print *, "Estimated root: ", root
+            print *, "Function value at root: ", rational_function(root)
+            print *, "-----------------------------------------------"
+        end if
+    end do
+
+contains
+
+    ! Function 1: A cubic function f(x) = x^3 - 3x + 1
+    real(8) function cubic_function(x)
+        real(8), intent(in) :: x
+        cubic_function = x**3 - 3.0d0 * x + 1.0d0
+    end function cubic_function
+
+    ! Function 2: A transcendental function f(x) = sin(x) - 0.5
+    real(8) function sine_function(x)
+        real(8), intent(in) :: x
+        sine_function = sin(x) - 0.5d0
+    end function sine_function
+
+    ! Function 3: A rational function f(x) = (x - 1) / (x + 2)
+    real(8) function rational_function(x)
+        real(8), intent(in) :: x
+        rational_function = (x - 1.0d0) / (x + 2.0d0)
+    end function rational_function
+
+end program test_brent_complex
+
+ian@ian-Latitude-E7440:~$ cat parab.f95
+module brent_module
+    implicit none
+contains
+    function brent(f, a, b, tol) result(root)
+        ! Function to find the root of f using Brent's method.
+        implicit none
+        real(8), external :: f
+        real(8) :: a, b, tol, root
+        real(8) :: fa, fb, fc, c, s, d, e
+        real(8) :: xm, p, q, r, tol1
+        integer :: iter, max_iter
+
+        ! Initialize parameters
+        fa = f(a)
+        fb = f(b)
+        if (fa * fb > 0.0) then
+            print *, "Function values at a and b must have opposite signs."
+            stop
+        end if
+        if (abs(fa) < abs(fb)) then
+            ! Swap a and b if necessary
+            c = a
+            a = b
+            b = c
+            fc = fa
+            fa = fb
+            fb = fc
+        else
+            c = a
+            fc = fa
+        end if
+
+        d = b - a
+        e = d
+        max_iter = 100
+        do iter = 1, max_iter
+            if (abs(fc) < abs(fb)) then
+                a = b
+                b = c
+                c = a
+                fa = fb
+                fb = fc
+                fc = fa
+            end if
+            tol1 = 2.0d-8 * abs(b) + 0.5d-8
+            xm = 0.5d0 * (c - b)
+
+            if (abs(xm) <= tol1 .or. fb == 0.0d0) then
+                root = b
+                return
+            end if
+
+            if (abs(e) >= tol1 .and. abs(fa) > abs(fb)) then
+                s = fb / fa
+                if (a == c) then
+                    p = 2.0d0 * xm * s
+                    q = 1.0d0 - s
+                else
+                    q = fa / fc
+                    r = fb / fc
+                    p = s * (2.0d0 * xm * q * (q - r) - (b - a) * (r - 1.0d0))
+                    q = (q - 1.0d0) * (r - 1.0d0) * (s - 1.0d0)
+                end if
+                if (p > 0.0d0) q = -q
+                p = abs(p)
+                if (2.0d0 * p < min(3.0d0 * xm * q - abs(tol1 * q), abs(e * q))) then
+                    e = d
+                    d = p / q
+                else
+                    d = xm
+                    e = d
+                end if
+            else
+                d = xm
+                e = d
+            end if
+            a = b
+            fa = fb
+            if (abs(d) > tol1) then
+                b = b + d
+            else
+                b = b + sign(tol1, xm)
+            end if
+            fb = f(b)
+        end do
+        print *, "Maximum iterations reached without convergence."
+        stop
+    end function brent
+end module brent_module
+
+ian@ian-Latitude-E7440:~$ gfortran parabtest.f95 parab.f95 -o parabtest
+/usr/bin/ld: warning: /tmp/ccOZoj6M.o: requires executable stack (because the .note.GNU-stack section is executable)
+ian@ian-Latitude-E7440:~$ ./parabtest
+ Testing cubic_function: f(x) = x^3 - 3x + 1
+ Estimated root:   -2.0000000000000000     
+ Function value at root:   -1.0000000000000000     
+ -----------------------------------------------
+ Testing sine_function: f(x) = sin(x) - 0.5
+ Estimated root:    7.7566674908296353E-009
+ Function value at root:  -0.49999999224333253     
+ -----------------------------------------------
+ Testing rational_function: f(x) = (x - 1) / (x + 2)
+ Function values at a and b must have opposite signs.
+ian@ian-Latitude-E7440:~$ 
